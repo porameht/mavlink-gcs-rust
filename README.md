@@ -2,26 +2,7 @@
 
 A TUI-based Ground Control Station for monitoring telemetry and commanding drones via MAVLink protocol.
 
-```
-┌─ MAVLink GCS ──────────────────────────────────────────┐
-│  ┌─ Status ──────────┐  ┌─ Attitude ────────────────┐  │
-│  │ Conn: ✓ CONNECTED │  │ Roll:   -2.30°            │  │
-│  │ Mode: GUIDED      │  │ Pitch:   1.50°            │  │
-│  │ Arm:  ARMED       │  │ Yaw:    45.20°            │  │
-│  └────────────────────┘  └───────────────────────────┘  │
-│  ┌─ GPS ─────────────┐  ┌─ Battery ─────────────────┐  │
-│  │ Lat:  13.7563000  │  │ ██████████████░░░  87%    │  │
-│  │ Lon: 100.5018000  │  │ 12.4V  87%                │  │
-│  │ Alt:  50.2m       │  └───────────────────────────┘  │
-│  └────────────────────┘                                │
-│  ┌─ Log ─────────────────────────────────────────────┐  │
-│  │ 15:03:22  arm → sent                              │  │
-│  │ 15:03:22  ACK: ARM_DISARM → ACCEPTED              │  │
-│  │ 15:03:25  takeoff 50m → sent                      │  │
-│  └───────────────────────────────────────────────────┘  │
-│  > _                                                   │
-└────────────────────────────────────────────────────────┘
-```
+<img width="1237" height="898" alt="Screenshot 2569-04-18 at 22 04 01" src="https://github.com/user-attachments/assets/5c54a6b8-3c80-4303-96cd-d05f87c6067e" />
 
 ## What is this?
 
