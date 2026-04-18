@@ -121,19 +121,22 @@ src/
 
 ## Architecture
 
-```
-main thread                    recv thread              heartbeat thread
-    │                              │                         │
-    ├─ TUI render (20fps)          ├─ conn.recv()            ├─ send HEARTBEAT
-    ├─ handle keyboard             ├─ update VehicleState    │   every 1 sec
-    ├─ send commands               ├─ log COMMAND_ACK        │
-    ├─ check disconnect            └─ loop                   └─ loop
-    └─ loop
-                    │
-        ┌───────────┴───────────┐
-        │  Arc<Mutex<Vehicle>>  │
-        │  (shared state)       │
-        └───────────────────────┘
+### Software Threads
+
+```mermaid
+graph LR
+    subgraph "mavlink-gcs-rust"
+        M["Main Thread<br/>TUI render 20fps<br/>handle keyboard<br/>send commands<br/>check disconnect"]
+        R["Recv Thread<br/>conn.recv()<br/>update VehicleState<br/>log COMMAND_ACK"]
+        H["Heartbeat Thread<br/>send HEARTBEAT<br/>every 1 sec"]
+        S[("Arc&lt;Mutex&gt;<br/>VehicleState<br/>(shared state)")]
+    end
+
+    M <--> S
+    R --> S
+    H -.-> |MAVLink| D["Drone / Mock"]
+    R <-.-> |MAVLink| D
+    M -.-> |commands| D
 ```
 
 ## Testing
@@ -173,46 +176,53 @@ cargo run --bin test_commands -- 5762
 
 ## Full System Architecture
 
+```mermaid
+graph TB
+    subgraph Computer["Your Computer"]
+        GCS["mavlink-gcs-rust<br/>(Rust TUI app)"]
+    end
+
+    GCS <-->|"MAVLink<br/>WiFi / Radio / USB"| FC
+
+    subgraph Drone
+        FC["Pixhawk<br/>Flight Controller"]
+        FW["ArduPilot Firmware<br/>• Read sensors 400Hz<br/>• Stabilize flight<br/>• Execute commands<br/>• Send telemetry"]
+        FC --- FW
+
+        FC <--> GPS["GPS Module<br/>Position + Heading"]
+        FC --> ESC1["ESC × 4"]
+        ESC1 --> Motors["Motors × 4<br/>Thrust"]
+        FC <--> RC["RC Receiver<br/>Manual Override"]
+        Battery["4S LiPo Battery"] --> PM["Power Module"]
+        PM --> FC
+    end
+
+    Transmitter["RC Transmitter<br/>(safety override)"] -.->|2.4GHz| RC
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Your Computer                           │
-│                                                             │
-│  ┌──────────────────┐                                       │
-│  │  mavlink-gcs-rust │  ← you are here                     │
-│  │  (Rust TUI app)   │                                      │
-│  └────────┬──────────┘                                      │
-│           │ MAVLink (UDP / TCP / Serial)                     │
-└───────────┼─────────────────────────────────────────────────┘
-            │
-            │  WiFi / Telemetry Radio / USB
-            │
-┌───────────▼─────────────────────────────────────────────────┐
-│                        Drone                                │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Flight Controller (Pixhawk)                         │   │
-│  │  ┌────────────────────────────────────────────────┐  │   │
-│  │  │  ArduPilot Firmware (ArduCopter)               │  │   │
-│  │  │  - Read sensors (GPS, gyro, accel, baro, mag)  │  │   │
-│  │  │  - Stabilize flight (400Hz PID loop)           │  │   │
-│  │  │  - Execute commands (arm, takeoff, waypoint)   │  │   │
-│  │  │  - Send telemetry via MAVLink                  │  │   │
-│  │  └────────────────────────────────────────────────┘  │   │
-│  └──────────┬───────────────────────────────────────────┘   │
-│             │                                               │
-│  ┌──────────▼───────────────────────────────────────────┐   │
-│  │  Connected Hardware                                  │   │
-│  │                                                      │   │
-│  │  GPS Module ──────── Position + heading               │   │
-│  │  ESC × 4 ─────────── Motor speed control              │   │
-│  │  Motors × 4 ──────── Thrust                           │   │
-│  │  Battery ─────────── Power (3S/4S LiPo)               │   │
-│  │  Telemetry Radio ─── MAVLink to GCS                   │   │
-│  │  RC Receiver ─────── Manual override                  │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                             │
-│  Frame + Propellers                                         │
-└─────────────────────────────────────────────────────────────┘
+
+### Connection Diagram
+
+```mermaid
+graph LR
+    subgraph Ground
+        Mac["Your Mac"]
+        TX["RC Transmitter"]
+        Radio_G["Telemetry Radio<br/>(ground)"]
+    end
+
+    subgraph Air["Drone"]
+        PX["Pixhawk"]
+        Radio_A["Telemetry Radio<br/>(air)"]
+        RX["RC Receiver"]
+        GPS["GPS"]
+        ESC["ESC × 4"] --> M["Motors × 4"]
+        Bat["Battery"] --> PW["Power Module"] --> PX
+    end
+
+    Mac <--> Radio_G <-->|"433/915MHz<br/>1-40km"| Radio_A <--> PX
+    TX -.->|"2.4GHz"| RX --> PX
+    GPS <--> PX
+    PX --> ESC
 ```
 
 ## Hardware Shopping List
@@ -274,22 +284,6 @@ RadioMaster Boxer + ELRS Receiver               ~$100
 Total                                          ~$405
 ```
 
-### Connection Diagram
-
-```
-RC Transmitter ─── 2.4GHz ───► RC Receiver ──► Pixhawk (manual override)
-
-Your Mac ◄── USB/Radio/WiFi ──► Pixhawk (GCS telemetry + commands)
-
-Pixhawk
-  ├── GPS Module (I2C/Serial)
-  ├── ESC 1 → Motor 1 (front-right)
-  ├── ESC 2 → Motor 2 (rear-left)
-  ├── ESC 3 → Motor 3 (front-left)
-  ├── ESC 4 → Motor 4 (rear-right)
-  ├── Power Module → Battery (4S LiPo)
-  └── Telemetry Radio → GCS
-```
 
 ### Important Safety Notes
 
@@ -311,8 +305,7 @@ Pixhawk
 | **Sensors** | GPS, Gyro, Accel, Baro, Mag | Position, orientation, altitude |
 | **Actuators** | ESC + Brushless Motors | Thrust control |
 | **Power** | 4S LiPo Battery | ~15 min flight time |
-| **Simulation** | ArduPilot SITL (Docker) | Test without hardware |
-| **Mock** | mock_drone (Rust) | Fast GCS development |
+| **Simulation** | mock_drone (built-in Rust) | Test without hardware |
 
 ## Roadmap
 
