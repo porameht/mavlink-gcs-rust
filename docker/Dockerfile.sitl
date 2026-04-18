@@ -1,0 +1,23 @@
+FROM python:3.11-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential g++ python3-pip python3-dev \
+    libxml2-dev libxslt-dev pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --break-system-packages pymavlink MAVProxy future lxml
+
+RUN git clone --depth 1 --recurse-submodules --shallow-submodules \
+    https://github.com/ArduPilot/ardupilot.git /ardupilot
+
+WORKDIR /ardupilot
+
+RUN ./waf configure --board sitl && ./waf copter
+
+EXPOSE 5760 14550 14551
+
+CMD ["python3", "Tools/autotest/sim_vehicle.py", \
+     "-v", "ArduCopter", \
+     "--no-mavproxy", \
+     "--out", "tcpin:0.0.0.0:5760", \
+     "-w"]

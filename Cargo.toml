@@ -1,0 +1,11 @@
+[package]
+name = "mavlink-gcs-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mavlink = { version = "0.14", features = ["ardupilotmega", "udp", "tcp", "direct-serial"] }
+ratatui = "0.29"
+crossterm = "0.28"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
