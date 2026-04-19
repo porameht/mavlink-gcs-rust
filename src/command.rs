@@ -68,8 +68,53 @@ pub fn parse_and_send(conn: &MavConn, input: &str, target_system: u8) -> Result<
             send_msg(conn, &msg)?;
             Ok(format!("goto {lat},{lon} alt={alt}m → sent"))
         }
+        "param" => {
+            if parts.len() < 3 {
+                return Ok("usage: param set <name> <value> | param get <name>".into());
+            }
+            match parts[1].to_lowercase().as_str() {
+                "set" => {
+                    if parts.len() < 4 {
+                        return Ok("usage: param set <name> <value>".into());
+                    }
+                    let name = parts[2];
+                    let value: f32 = parts[3].parse().unwrap_or(0.0);
+                    let param_id = make_param_id(name);
+                    let msg = MavMessage::PARAM_SET(PARAM_SET_DATA {
+                        param_value: value,
+                        target_system,
+                        target_component: 0,
+                        param_id,
+                        param_type: MavParamType::MAV_PARAM_TYPE_REAL32,
+                    });
+                    send_msg(conn, &msg)?;
+                    Ok(format!("param set {name}={value} → sent"))
+                }
+                "get" => {
+                    let name = parts[2];
+                    let param_id = make_param_id(name);
+                    let msg = MavMessage::PARAM_REQUEST_READ(PARAM_REQUEST_READ_DATA {
+                        param_index: -1,
+                        target_system,
+                        target_component: 0,
+                        param_id,
+                    });
+                    send_msg(conn, &msg)?;
+                    Ok(format!("param get {name} → sent"))
+                }
+                _ => Ok("usage: param set <name> <value> | param get <name>".into()),
+            }
+        }
         _ => Ok(format!("unknown command: {}", parts[0])),
     }
+}
+
+fn make_param_id(name: &str) -> [u8; 16] {
+    let mut param_id = [0u8; 16];
+    for (i, b) in name.bytes().take(16).enumerate() {
+        param_id[i] = b;
+    }
+    param_id
 }
 
 fn send_set_mode(conn: &MavConn, target_system: u8, mode_num: u32) -> Result<()> {

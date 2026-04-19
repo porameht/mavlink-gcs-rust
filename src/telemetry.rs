@@ -51,6 +51,11 @@ pub fn handle_message(state: &Arc<Mutex<VehicleState>>, header: &mavlink::MavHea
             s.satellites = gps.satellites_visible;
         }
 
+        MavMessage::PARAM_VALUE(p) => {
+            let name = String::from_utf8_lossy(&p.param_id).trim_end_matches('\0').to_string();
+            s.log_msg(format!("PARAM: {name} = {}", p.param_value));
+        }
+
         _ => {}
     }
 }

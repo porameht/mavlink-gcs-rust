@@ -1,23 +1,45 @@
 # MAVLink Ground Control Station (Rust)
 
-A TUI-based Ground Control Station for monitoring telemetry and commanding drones via MAVLink protocol.
+A GUI-based Ground Control Station with live video feed for monitoring telemetry and commanding drones via MAVLink protocol.
 
+<<<<<<< Updated upstream
 <img width="1237" height="898" alt="Screenshot 2569-04-18 at 22 04 01" src="https://github.com/user-attachments/assets/5c54a6b8-3c80-4303-96cd-d05f87c6067e" />
+=======
+```
+┌─ MAVLink GCS ──────────────────────────────────────────────┐
+│ ┌─ Video ─────────────────────┐ ┌─ Status ───────────────┐ │
+│ │                             │ │ ● CONNECTED            │ │
+│ │     Live Camera Feed        │ │ Mode: GUIDED  ARMED    │ │
+│ │     (GStreamer H.264)       │ │ Bat: 12.4V 87%         │ │
+│ │                             │ ├─ GPS ──────────────────┤ │
+│ │                             │ │ Lat: 13.7563000        │ │
+│ │                             │ │ Lon: 100.5018000       │ │
+│ └─────────────────────────────┘ │ Alt: 50.2m  Hdg: 45°   │ │
+│                                 ├─ Attitude ─────────────┤ │
+│ ┌─ Command ────────────────────┐│ Roll: -2.30°           │ │
+│ │ > arm                        ││ Pitch: 1.50°           │ │
+│ │ ACK: ARM_DISARM → ACCEPTED  ││ Yaw: 45.20°            │ │
+│ │ > takeoff 50                 │├─ Log ──────────────────┤ │
+│ │ ACK: TAKEOFF → ACCEPTED     ││ 15:03:22 arm → sent    │ │
+│ │                              ││ 15:03:22 ACK: ACCEPTED │ │
+│ │ [ARM][DISARM][TAKEOFF][RTL]  │└────────────────────────┘ │
+│ └──────────────────────────────┘                           │
+└────────────────────────────────────────────────────────────┘
+```
+>>>>>>> Stashed changes
 
 ## What is this?
 
-```
-┌───────────┐  MAVLink (UDP/TCP/Serial)  ┌──────────────┐
-│  Your Mac │ ◄────────────────────────► │    Drone     │
-│  GCS app  │     read telemetry         │  (Pixhawk +  │
-│  (TUI)    │     send commands          │  ArduPilot)  │
-└───────────┘                            └──────────────┘
+```mermaid
+graph LR
+    Mac["Your Mac<br/>GCS app (GUI)"] <-->|"MAVLink<br/>UDP / TCP / Serial"| Drone["Drone<br/>Pixhawk + ArduPilot"]
 ```
 
 - **GCS** — Software on your computer to monitor and command a drone
 - **MAVLink** — Industry-standard lightweight protocol for drone communication
 - **Pixhawk** — Flight controller board with onboard sensors (gyro, accel, baro, mag)
 - **ArduPilot** — Open-source autopilot firmware that runs on Pixhawk
+- **GStreamer** — Video streaming framework for live camera feed
 
 **No real drone needed** — comes with a built-in mock drone simulator for testing.
 
@@ -27,13 +49,16 @@ A TUI-based Ground Control Station for monitoring telemetry and commanding drone
 # Terminal 1: Start mock drone
 cargo run --bin mock_drone
 
-# Terminal 2: Run GCS
-cargo run -- -c tcpout:127.0.0.1:5760
+# Terminal 2: Run GCS (no video)
+cargo run --bin mavlink-gcs-rust -- -c tcpout:127.0.0.1:5760 --no-video
+
+# Or with test video pattern
+cargo run --bin mavlink-gcs-rust -- -c tcpout:127.0.0.1:5760 --test-video
 ```
 
 ## Commands
 
-Type in the GCS and press Enter:
+Type in the command box and press Enter, or use the quick buttons:
 
 | Command | Action |
 |---------|--------|
@@ -45,7 +70,8 @@ Type in the GCS and press Enter:
 | `goto 13.75 100.50 50` | Fly to coordinates (lat lon alt) |
 | `rtl` | Return To Launch |
 | `land` | Land |
-| `q` / `Esc` | Quit |
+| `param set FS_GCS_ENABLE 1` | Set failsafe parameter |
+| `param get RTL_ALT` | Read parameter value |
 
 Every command is sent as a MAVLink `COMMAND_LONG` and waits for `COMMAND_ACK` confirmation.
 
@@ -53,13 +79,32 @@ Every command is sent as a MAVLink `COMMAND_LONG` and waits for `COMMAND_ACK` co
 
 ```bash
 # Mock drone (testing)
-cargo run -- -c tcpout:127.0.0.1:5760
+cargo run --bin mavlink-gcs-rust -- -c tcpout:127.0.0.1:5760
 
 # ArduPilot SITL (UDP)
-cargo run -- -c udpin:0.0.0.0:14550
+cargo run --bin mavlink-gcs-rust -- -c udpin:0.0.0.0:14550
 
 # Real Pixhawk (Serial)
-cargo run -- -c serial:/dev/tty.usbserial:57600
+cargo run --bin mavlink-gcs-rust -- -c serial:/dev/tty.usbserial:57600
+```
+
+## Video Streaming
+
+GCS receives live video via GStreamer (RTP H.264 on UDP port 5600).
+
+| Flag | Effect |
+|------|--------|
+| (default) | Listen for video on UDP:5600 |
+| `--test-video` | Show test pattern (no camera needed) |
+| `--no-video` | Disable video |
+| `--video-port 5601` | Custom video port |
+
+**Drone side** (Raspberry Pi + Camera):
+```bash
+gst-launch-1.0 rpicamsrc bitrate=1500000 \
+  ! video/x-h264,width=1280,height=720,framerate=30/1 \
+  ! h264parse ! rtph264pay config-interval=1 pt=96 \
+  ! udpsink host=<GCS_IP> port=5600
 ```
 
 ## Telemetry
@@ -73,18 +118,20 @@ Real-time data from the drone:
 | Battery (voltage, %) | `SYS_STATUS` | 1 Hz |
 | GPS fix + satellites | `GPS_RAW_INT` | 1 Hz |
 | Flight mode + armed status | `HEARTBEAT` | 1 Hz |
+| Parameter values | `PARAM_VALUE` | On request |
 
 ## Project Structure
 
 ```
 src/
-├── main.rs          # CLI args, thread spawning, TUI loop
+├── main.rs          # CLI args, background MAVLink connect, GUI launch
 ├── lib.rs           # Public module exports
 ├── connection.rs    # MAVLink connect + send (UDP/TCP/Serial)
 ├── telemetry.rs     # Parse MAVLink messages → VehicleState
-├── command.rs       # Parse user input → MAVLink commands
+├── command.rs       # Parse user input → MAVLink commands + param set/get
 ├── vehicle.rs       # Shared state + ArduCopter mode mapping
-├── ui.rs            # Ratatui TUI rendering
+├── gui.rs           # egui GUI — video + telemetry + commands
+├── video.rs         # GStreamer video receiver (RTP H.264 → RGB frames)
 └── bin/
     ├── mock_drone.rs    # Drone simulator for testing
     ├── test_connect.rs  # Connection test
@@ -96,7 +143,8 @@ src/
 | Crate | Purpose |
 |-------|---------|
 | `mavlink` | MAVLink codec — ardupilotmega dialect, UDP/TCP/Serial |
-| `ratatui` + `crossterm` | Terminal UI — panels, gauges, live updates |
+| `eframe` + `egui` | Native GUI — panels, buttons, text input, live updates |
+| `gstreamer` + `gstreamer-video` + `gstreamer-app` | Video decode — RTP H.264 → RGB frames → egui texture |
 | `clap` | CLI argument parsing |
 | `anyhow` | Error handling |
 
@@ -107,78 +155,54 @@ src/
 ```mermaid
 graph LR
     subgraph "mavlink-gcs-rust"
-        M["Main Thread<br/>TUI render 20fps<br/>handle keyboard<br/>send commands<br/>check disconnect"]
-        R["Recv Thread<br/>conn.recv()<br/>update VehicleState<br/>log COMMAND_ACK"]
+        M["Main Thread<br/>egui GUI render<br/>handle input<br/>display video"]
+        C["Connect Thread<br/>MAVLink connect<br/>(non-blocking)"]
+        R["Recv Thread<br/>conn.recv()<br/>update VehicleState"]
         H["Heartbeat Thread<br/>send HEARTBEAT<br/>every 1 sec"]
-        S[("Arc&lt;Mutex&gt;<br/>VehicleState<br/>(shared state)")]
+        D["Disconnect Thread<br/>check timeout 5s"]
+        S[("Arc&lt;Mutex&gt;<br/>VehicleState")]
+        V[("Arc&lt;Mutex&gt;<br/>VideoFrame")]
     end
 
     M <--> S
+    M <--> V
+    C --> R
+    C --> H
     R --> S
-    H -.-> |MAVLink| D["Drone / Mock"]
-    R <-.-> |MAVLink| D
-    M -.-> |commands| D
+    D --> S
+    GS["GStreamer"] --> V
+    R <-.-> |MAVLink| DR["Drone / Mock"]
+    H -.-> |MAVLink| DR
 ```
 
-## Testing
-
-### Option 1: Mock Drone (no setup required)
-
-Built-in drone simulator — no dependencies, runs instantly.
-
-```bash
-# Terminal 1: Start mock drone
-cargo run --bin mock_drone
-
-# Terminal 2: Run GCS
-cargo run --bin mavlink-gcs-rust -- -c tcpout:127.0.0.1:5760
-```
-
-Mock drone sends realistic telemetry (GPS, attitude, battery) and responds to commands with ACK. No physics simulation — values change instantly.
-
-### Option 2: Real Pixhawk
-
-Connect to a real flight controller via USB or telemetry radio.
-
-```bash
-cargo run --bin mavlink-gcs-rust -- -c serial:/dev/tty.usbserial:57600
-```
-
-### Automated Tests
-
-```bash
-cargo build          # Build
-cargo clippy         # Lint (zero warnings)
-
-# Integration test (mock drone)
-cargo run --bin mock_drone -- 5762 &
-cargo run --bin test_commands -- 5762
-```
-
-## Full System Architecture
+### Full System Architecture
 
 ```mermaid
 graph TB
     subgraph Computer["Your Computer"]
-        GCS["mavlink-gcs-rust<br/>(Rust TUI app)"]
+        GCS["mavlink-gcs-rust<br/>(Rust GUI + GStreamer)"]
     end
 
     GCS <-->|"MAVLink<br/>WiFi / Radio / USB"| FC
+    GCS <-.->|"Video RTP H.264<br/>UDP:5600"| CAM
 
     subgraph Drone
         FC["Pixhawk<br/>Flight Controller"]
-        FW["ArduPilot Firmware<br/>• Read sensors 400Hz<br/>• Stabilize flight<br/>• Execute commands<br/>• Send telemetry"]
+        FW["ArduPilot Firmware<br/>- Read sensors 400Hz<br/>- Stabilize flight<br/>- Execute commands<br/>- Send telemetry"]
         FC --- FW
 
-        FC <--> GPS["GPS Module<br/>Position + Heading"]
-        FC --> ESC1["ESC × 4"]
-        ESC1 --> Motors["Motors × 4<br/>Thrust"]
-        FC <--> RC["RC Receiver<br/>Manual Override"]
-        Battery["4S LiPo Battery"] --> PM["Power Module"]
-        PM --> FC
+        FC <--> GPS["GPS Module"]
+        FC --> ESC["ESC x4"] --> Motors["Motors x4"]
+        FC <--> RC["RC Receiver"]
+        Battery["4S LiPo"] --> PM["Power Module"] --> FC
+
+        subgraph Companion["Companion Computer (optional)"]
+            CAM["Camera + Pi<br/>H.264 encode"]
+        end
+        CAM <--> FC
     end
 
-    Transmitter["RC Transmitter<br/>(safety override)"] -.->|2.4GHz| RC
+    TX["RC Transmitter<br/>(safety override)"] -.->|2.4GHz| RC
 ```
 
 ### Connection Diagram
@@ -196,7 +220,7 @@ graph LR
         Radio_A["Telemetry Radio<br/>(air)"]
         RX["RC Receiver"]
         GPS["GPS"]
-        ESC["ESC × 4"] --> M["Motors × 4"]
+        ESC["ESC x4"] --> M["Motors x4"]
         Bat["Battery"] --> PW["Power Module"] --> PX
     end
 
@@ -204,6 +228,39 @@ graph LR
     TX -.->|"2.4GHz"| RX --> PX
     GPS <--> PX
     PX --> ESC
+```
+
+## Testing
+
+### Option 1: Mock Drone (no setup required)
+
+Built-in drone simulator — no dependencies, runs instantly.
+
+```bash
+# Terminal 1: Start mock drone
+cargo run --bin mock_drone
+
+# Terminal 2: Run GCS
+cargo run --bin mavlink-gcs-rust -- -c tcpout:127.0.0.1:5760 --no-video
+```
+
+### Option 2: Real Pixhawk
+
+Connect to a real flight controller via USB or telemetry radio.
+
+```bash
+cargo run --bin mavlink-gcs-rust -- -c serial:/dev/tty.usbserial:57600
+```
+
+### Automated Tests
+
+```bash
+cargo build          # Build
+cargo clippy         # Lint
+
+# Integration test (mock drone)
+cargo run --bin mock_drone -- 5762 &
+cargo run --bin test_commands -- 5762
 ```
 
 ## Hardware Shopping List
@@ -214,15 +271,15 @@ Everything you need to build a drone that works with this GCS.
 
 | Component | What it does | Recommended | Est. Price |
 |-----------|-------------|-------------|------------|
-| **Frame** | Structure that holds everything | F450 / S500 (450-500mm quad) | $15-30 |
+| **Frame** | Structure | F450 / S500 (450-500mm quad) | $15-30 |
 | **Flight Controller** | Brain — runs ArduPilot | Pixhawk 6C / Pixhawk 4 | $80-150 |
-| **GPS Module** | Position + compass | M10 GPS (comes with many Pixhawk kits) | $20-40 |
-| **Motors × 4** | Thrust | 2212 920KV (for 450mm frame) | $30-50 |
-| **ESC × 4** | Motor speed control | 30A BLHeli_S | $20-40 |
+| **GPS Module** | Position + compass | M10 GPS (comes with Pixhawk kits) | $20-40 |
+| **Motors x4** | Thrust | 2212 920KV (for 450mm frame) | $30-50 |
+| **ESC x4** | Motor speed control | 30A BLHeli_S | $20-40 |
 | **Propellers** | Lift | 1045 (10 inch) — buy spares! | $5-10 |
 | **Battery** | Power | 4S 5200mAh LiPo | $30-50 |
-| **Battery Charger** | Charge LiPo safely | ISDT Q6 or similar balance charger | $30-50 |
-| **Power Module** | Battery → Pixhawk power + voltage sensing | Comes with Pixhawk usually | $10-15 |
+| **Battery Charger** | Charge LiPo safely | ISDT Q6 balance charger | $30-50 |
+| **Power Module** | Battery to Pixhawk power | Comes with Pixhawk usually | $10-15 |
 
 ### For GCS Connection (pick one)
 
@@ -232,44 +289,46 @@ Everything you need to build a drone that works with this GCS.
 | **Telemetry Radio** | 300m-1km | SiK Radio 433/915MHz pair (air + ground) | $20-40 |
 | **WiFi** | 50-100m | ESP8266 MAVLink WiFi bridge | $10-15 |
 
-### For Manual Control (safety)
+### Optional — Manual Control
 
 | Component | What it does | Recommended | Est. Price |
 |-----------|-------------|-------------|------------|
-| **RC Transmitter** | Manual flight control + kill switch | RadioMaster Boxer / TX16S | $80-150 |
-| **RC Receiver** | Receives from transmitter | ExpressLRS receiver | $15-25 |
+| **RC Transmitter** | Manual flight control + kill switch | RadioMaster Pocket ELRS | $60 |
+| **RC Receiver** | Receives from transmitter | BetaFPV ELRS Lite | $15 |
 
-### Optional (for Phase 2-3)
+Not required — drone can be fully controlled from Mac via GCS. But recommended for beginners as safety backup.
 
-| Component | What it does | Phase | Est. Price |
-|-----------|-------------|-------|------------|
-| **Companion Computer** | Runs auto-follow code on drone | Phase 2 | $35-80 |
-| **Camera** | Vision tracking | Phase 3 | $25-50 |
-| **UWB Module** | Precision indoor tracking | Phase 2 alt | $30-60 |
+### Optional — Video Streaming
 
-### Starter Kit Recommendation
+| Component | What it does | Est. Price |
+|-----------|-------------|------------|
+| **Raspberry Pi Zero 2W** | Encode + stream video | $15 |
+| **Pi Camera Module** | Capture video | $25 |
+| **4G USB Modem** | Long range video + telemetry | $20 |
 
-Cheapest way to get started with a real drone:
+### Starter Kit — GCS Only (no RC transmitter)
 
 ```
-Pixhawk 6C Kit (includes GPS + power module)   ~$120
-F450 Frame                                      ~$15
-4× 2212 920KV Motors                            ~$35
-4× 30A ESC                                      ~$25
-1045 Props (×3 sets)                             ~$10
+Holybro S500 Kit (Pixhawk 6C + GPS + PM)        ~$200
+4x 30A ESC (if not in kit)                       ~$25
+1045 Props (x3 sets)                             ~$10
 4S 5200mAh LiPo Battery                         ~$40
-LiPo Charger                                    ~$35
-SiK Telemetry Radio (pair)                      ~$25
-RadioMaster Boxer + ELRS Receiver               ~$100
+LiPo Balance Charger                             ~$35
+SiK Telemetry Radio 433MHz (pair)                ~$25
 ─────────────────────────────────────────────────
-Total                                          ~$405
+Total                                           ~$335 (~12,000 THB)
 ```
 
+### Range Extension (ground side only — no weight added to drone)
+
+| Upgrade | Effect | Price |
+|---------|--------|-------|
+| Replace ground antenna with **directional patch** | Range x3-5 (5-10 km) | ~$20 |
+| Add **antenna tracker** | Range x5-10 (10-20 km) | ~$80 |
 
 ### Important Safety Notes
 
-- **Always have RC transmitter** as manual override — never fly with GCS only
-- **Set failsafe** in ArduPilot: RTL on signal loss
+- **Set failsafe** in ArduPilot: `param set FS_GCS_ENABLE 1` — drone flies home on signal loss
 - **Test on the ground first** — arm and check motor direction before flying
 - **Fly in open area** — away from people, buildings, power lines
 - **Check local drone regulations** before flying
@@ -278,9 +337,10 @@ Total                                          ~$405
 
 | Layer | Technology | Role |
 |-------|-----------|------|
-| **GCS Software** | Rust + mavlink crate | Monitor + command drone from computer |
-| **Protocol** | MAVLink v2 | Communication between GCS ↔ drone |
+| **GCS Software** | Rust + egui + GStreamer | Monitor + command + video |
+| **Protocol** | MAVLink v2 | Communication between GCS and drone |
 | **Transport** | UDP / TCP / Serial | Physical link (radio, WiFi, USB) |
+| **Video** | GStreamer (RTP H.264) | Live camera feed from drone |
 | **Firmware** | ArduPilot (ArduCopter) | Autopilot running on flight controller |
 | **Hardware** | Pixhawk (ARM Cortex-M7) | Flight controller board |
 | **Sensors** | GPS, Gyro, Accel, Baro, Mag | Position, orientation, altitude |
@@ -290,6 +350,6 @@ Total                                          ~$405
 
 ## Roadmap
 
-- **Phase 1 (done)**: GCS core — connection, telemetry, commands, TUI
+- **Phase 1 (done)**: GCS core — connection, telemetry, commands, GUI, video
 - **Phase 2**: GPS auto-follow — PID controller + `SET_POSITION_TARGET_GLOBAL_INT`
 - **Phase 3**: Vision + sensor fusion — YOLO object detection + Kalman filter
