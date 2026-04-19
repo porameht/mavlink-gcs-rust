@@ -2,9 +2,6 @@
 
 A GUI-based Ground Control Station with live video feed for monitoring telemetry and commanding drones via MAVLink protocol.
 
-<<<<<<< Updated upstream
-<img width="1237" height="898" alt="Screenshot 2569-04-18 at 22 04 01" src="https://github.com/user-attachments/assets/5c54a6b8-3c80-4303-96cd-d05f87c6067e" />
-=======
 ```
 ┌─ MAVLink GCS ──────────────────────────────────────────────┐
 │ ┌─ Video ─────────────────────┐ ┌─ Status ───────────────┐ │
@@ -26,7 +23,6 @@ A GUI-based Ground Control Station with live video feed for monitoring telemetry
 │ └──────────────────────────────┘                           │
 └────────────────────────────────────────────────────────────┘
 ```
->>>>>>> Stashed changes
 
 ## What is this?
 
