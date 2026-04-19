@@ -15,9 +15,9 @@ A GUI-based Ground Control Station with live video feed for monitoring telemetry
 │                                 ├─ Attitude ─────────────┤ │
 │ ┌─ Command ────────────────────┐│ Roll: -2.30°           │ │
 │ │ > arm                        ││ Pitch: 1.50°           │ │
-│ │ ACK: ARM_DISARM → ACCEPTED  ││ Yaw: 45.20°            │ │
+│ │  ACK: ARM_DISARM → ACCEPTED  ││ Yaw: 45.20°            │ │
 │ │ > takeoff 50                 │├─ Log ──────────────────┤ │
-│ │ ACK: TAKEOFF → ACCEPTED     ││ 15:03:22 arm → sent    │ │
+│ │  ACK: TAKEOFF → ACCEPTED     ││ 15:03:22 arm → sent    │ │
 │ │                              ││ 15:03:22 ACK: ACCEPTED │ │
 │ │ [ARM][DISARM][TAKEOFF][RTL]  │└────────────────────────┘ │
 │ └──────────────────────────────┘                           │
